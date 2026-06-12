@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>People on the City - Ediție Nouă</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            background: #0a0410;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            height: 100vh; color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        h1 {
+            margin-bottom: 10px; font-size: 26px; letter-spacing: 3px;
+            text-shadow: 0 0 15px rgba(0, 123, 255, 0.7);
+        }
+        canvas {
+            border: 4px solid #fff; border-radius: 6px;
+            box-shadow: 0px 0px 35px rgba(0, 0, 0, 0.8);
+            background: linear-gradient(to bottom, #0f051d, #29113a);
+            cursor: pointer;
+        }
+        .instructions { margin-top: 15px; color: #888; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <h1>PEOPLE ON THE CITY</h1>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <p class="instructions">Apasă pe <strong>SPACE</strong> sau <strong>Click</strong> pentru ca Stickman-ul să sară peste mașini și gropi!</p>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// --- STARE JOC ---
+let gameSpeed = 5.5;
+let score = 0;
+let gameOver = false;
+let animationFrame = 0; // Folosit pentru animația picioarelor stickman-ului
+
+// --- JUCĂTOR (STICKMAN ALBASTRU) ---
+const player = {
+    x: 120,
+    y: 280, // Poziția la sol
+    width: 25,
+    height: 70,
+    color: "#00d2ff", // Albastru neon ciberpunk
+    vy: 0,
+    gravity: 0.65,
+    jumpForce: -13.5,
+    isJumping: false
+};
+
+// --- BAZĂ DE DATE OBSTACOLE (Tipuri de mașini și obstacole) ---
+const obstacleTypes = [
+    { type: 'car', width: 60, height: 30, color: '#ff3333', name: 'Sedan' },
+    { type: 'car', width: 75, height: 40, color: '#ffcc00', name: 'SUV' },
+    { type: 'car', width: 50, height: 28, color: '#00ff66', name: 'Sport' },
+    { type: 'car', width: 65, height: 32, color: '#ff00ff', name: 'Compact' },
+    { type: 'pothole', width: 45, height: 12, color: '#111', name: 'Groapă' }
+];
+
+// Obstacolul curent de pe ecran
+let currentObstacle = generateObstacle();
+
+function generateObstacle() {
+    // Alege un tip la întâmplare din lista de mai sus
+    const model = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+    
+    // Setează poziția Y corectă în funcție de tip (gropile sunt în asfalt, mașinile pe asfalt)
+    let yPos = 320; 
+    if (model.type === 'pothole') {
+        yPos = 350; // Aliniat perfect cu suprafața drumului
+    } else {
+        yPos = 350 - model.height; // Mașina stă pe drum
+    }
+
+    return {
+        x: canvas.width + 100,
+        y: yPos,
+        width: model.width,
+        height: model.height,
+        color: model.color,
+        type: model.type
+    };
+}
+
+// --- FUNDAL (ORAȘ PARALLAX) ---
+const buildings = [
+    {x: 30, w: 90, h: 220}, {x: 180, w: 140, h: 300},
+    {x: 380, w: 80, h: 190}, {x: 520, w: 110, h: 260},
+    {x: 700, w: 95, h: 240}
+];
+
+// --- CONTROL ---
+function jump() {
+    if (gameOver) {
+        resetGame();
+    } else if (!player.isJumping) {
+        player.vy = player.jumpForce;
+        player.isJumping = true;
+    }
+}
+
+window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") { e.preventDefault(); jump(); }
+});
+canvas.addEventListener("mousedown", jump);
+
+function resetGame() {
+    score = 0;
+    gameSpeed = 5.5;
+    gameOver = false;
+    player.y = 280;
+    player.vy = 0;
+    player.isJumping = false;
+    currentObstacle = generateObstacle();
+    update();
+}
+
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+}
+
+// --- BUCLA PRINCIPALĂ ---
+function update() {
+    if (gameOver) return;
+
+    animationFrame++;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 1. Desenare Oraș (Fundal)
+    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+    buildings.forEach(b => {
+        b.x -= gameSpeed * 0.15;
+        if (b.x + b.w < 0) b.x = canvas.width;
+        ctx.fillRect(b.x, canvas.height - b.h, b.w, b.h);
+    });
+
+    // 2. Desenare Drum
+    ctx.fillStyle = "#222"; // Asfalt mai închis
+    ctx.fillRect(0, 350, canvas.width, 50);
+    ctx.fillStyle = "#444"; // Linie trotuar
+    ctx.fillRect(0, 350, canvas.width, 4);
+
+    // 3. Fizică Jucător
+    player.vy += player.gravity;
+    player.y += player.vy;
+
+    if (player.y >= 280) {
+        player.y = 280;
+        player.vy = 0;
+        player.isJumping = false;
+    }
+
+    // 4. DESENARE STICKMAN (OMULEȚ)
+    ctx.strokeStyle = player.color;
+    ctx.lineWidth = 4;
+    ctx.fillStyle = player.color;
+
+    let sX = player.x + player.width / 2; // Centrul pe axa X
+    let sY = player.y;
+
+    // Capul
+    ctx.beginPath();
+    ctx.arc(sX, sY + 12, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Corpul (Coloana)
+    ctx.beginPath();
+    ctx.moveTo(sX, sY + 22);
+    ctx.lineTo(sX, sY + 48);
+    ctx.stroke();
+
+    // Mâinile (Dinamice în funcție de săritură)
+    ctx.beginPath();
+    if (player.isJumping) {
+        // Mâinile sus când sare
+        ctx.moveTo(sX, sY + 28); ctx.lineTo(sX - 12, sY + 15);
+        ctx.moveTo(sX, sY + 28); ctx.lineTo(sX + 12, sY + 15);
+    } else {
+        // Mâinile înainte/înapoi când aleargă
+        let armSwing = Math.sin(animationFrame * 0.15) * 10;
+        ctx.moveTo(sX, sY + 28); ctx.lineTo(sX - 10 + armSwing, sY + 40);
+        ctx.moveTo(sX, sY + 28); ctx.lineTo(sX + 10 - armSwing, sY + 40);
+    }
+    ctx.stroke();
+
+    // Picioarele (Animate la alergare)
+    ctx.beginPath();
+    if (player.isJumping) {
+        // Picioarele strânse în săritură
+        ctx.moveTo(sX, sY + 48); ctx.lineTo(sX - 8, sY + 62); ctx.lineTo(sX - 4, sY + 70);
+        ctx.moveTo(sX, sY + 48); ctx.lineTo(sX + 8, sY + 62); ctx.lineTo(sX + 4, sY + 70);
+    } else {
+        // Efect de alergare alternând picioarele bazat pe Sinus
+        let legSwing = Math.sin(animationFrame * 0.2) * 12;
+        ctx.moveTo(sX, sY + 48); ctx.lineTo(sX + legSwing, sY + 70);
+        ctx.moveTo(sX, sY + 48); ctx.lineTo(sX - legSwing, sY + 70);
+    }
+    ctx.stroke();
+
+    // 5. MISCARE ȘI DESENARE OBSTACOLE
+    currentObstacle.x -= gameSpeed;
+
+    // Când obstacolul iese din ecran, generăm altul complet diferit
+    if (currentObstacle.x + currentObstacle.width < 0) {
+        currentObstacle = generateObstacle();
+        score++;
+        gameSpeed += 0.25; // Crește dificultatea treptat
+    }
+
+    // Desenare în funcție de tipul de obstacol
+    if (currentObstacle.type === 'car') {
+        // Este o mașină
+        ctx.fillStyle = currentObstacle.color;
+        ctx.fillRect(currentObstacle.x, currentObstacle.y, currentObstacle.width, currentObstacle.height);
+        
+        // Geamul mașinii (Efect vizual cool)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.fillRect(currentObstacle.x + currentObstacle.width - 20, currentObstacle.y + 4, 15, currentObstacle.height / 2.5);
+
+        // Roțile
+        ctx.fillStyle = "#000";
+        ctx.beginPath(); 
+        ctx.arc(currentObstacle.x + 15, currentObstacle.y + currentObstacle.height, 7, 0, Math.PI * 2); 
+        ctx.arc(currentObstacle.x + currentObstacle.width - 15, currentObstacle.y + currentObstacle.height, 7, 0, Math.PI * 2); 
+        ctx.fill();
+    } else if (currentObstacle.type === 'pothole') {
+        // Este o groapă în asfalt
+        ctx.fillStyle = "#111"; // Culoare neagră de adâncime
+        ctx.beginPath();
+        // Desenăm o elipsă pentru groapă
+        ctx.ellipse(currentObstacle.x + currentObstacle.width/2, currentObstacle.y, currentObstacle.width/2, currentObstacle.height/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#443322"; // Margine degradată de pământ/asfalt spart
+        ctx.stroke();
+    }
+
+    // 6. UI: Afișare Scor
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px 'Segoe UI'";
+    ctx.textAlign = "left";
+    ctx.fillText("Scor: " + score, 20, 35);
+
+    // 7. Verificare coliziune
+    // Ajustăm puțin cutia de coliziune a stickmanului ca să fie corectă din punct de vedere matematic
+    let playerHitbox = { x: player.x, y: player.y, width: player.width, height: player.height };
+    
+    if (checkCollision(playerHitbox, currentObstacle)) {
+        gameOver = true;
+        
+        // Ecranul de Game Over
+        ctx.fillStyle = "rgba(10, 4, 16, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#ff2a6d";
+        ctx.font = "bold 42px 'Segoe UI'";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 15);
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "18px 'Segoe UI'";
+        ctx.fillText("Ai obținut scorul: " + score, canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillText("Apasă SPACE sau Click pentru a reîncepe", canvas.width / 2, canvas.height / 2 + 55);
+        return;
+    }
+
+    requestAnimationFrame(update);
+}
+
+// Pornire motor joc
+update();
+</script>
+
+</body>
+</html>
